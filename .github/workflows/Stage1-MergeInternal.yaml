@@ -8,7 +8,17 @@ jobs:
   merge-to-internal:
     if: contains(vars.RELEASE_STAGES, 'internal')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
+      - name: Token aus GitHub App generieren
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ fromJson(secrets.GHTOKENWORKFLOW).GitHubAppClientId }}
+          private-key: ${{ fromJson(secrets.GHTOKENWORKFLOW).PrivateKey }}
+
       - name: Labels zurücksetzen (bei erneutem Push nach fehlgeschlagenem Test)
         if: github.event.action == 'synchronize'
         run: |
@@ -17,12 +27,12 @@ jobs:
           gh pr edit ${{ github.event.pull_request.number }} --remove-label "external-tested" \
             --repo ${{ github.repository }} 2>/dev/null || true
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GHTOKENWORKFLOW }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Merge feature branch into rc/internal
         run: |

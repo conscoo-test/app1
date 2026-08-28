@@ -7,10 +7,17 @@ jobs:
   prerelease:
     runs-on: ubuntu-latest
     steps:
+      - name: Token aus GitHub App generieren
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ fromJson(secrets.GHTOKENWORKFLOW).GitHubAppClientId }}
+          private-key: ${{ fromJson(secrets.GHTOKENWORKFLOW).PrivateKey }}
+
       - run: |
           gh workflow run "Create release" \
             --ref rc/external \
             --field prerelease=true \
             --repo ${{ github.repository }}
         env:
-          GH_TOKEN: ${{ secrets.GHTOKENWORKFLOW }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}

@@ -8,11 +8,20 @@ jobs:
   merge-to-external:
     if: github.event.label.name == 'internal-tested' && contains(vars.RELEASE_STAGES, 'external')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
+      - name: Token aus GitHub App generieren
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ fromJson(secrets.GHTOKENWORKFLOW).GitHubAppClientId }}
+          private-key: ${{ fromJson(secrets.GHTOKENWORKFLOW).PrivateKey }}
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GHTOKENWORKFLOW }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Merge feature branch into rc/external
         run: |

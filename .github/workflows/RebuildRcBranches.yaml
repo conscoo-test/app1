@@ -6,11 +6,20 @@ on:
 jobs:
   rebuild-rc-branches:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
+      - name: Token aus GitHub App generieren
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ fromJson(secrets.GHTOKENWORKFLOW).GitHubAppClientId }}
+          private-key: ${{ fromJson(secrets.GHTOKENWORKFLOW).PrivateKey }}
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GHTOKENWORKFLOW }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Rebuild rc/internal
         if: contains(vars.RELEASE_STAGES, 'internal')
@@ -31,7 +40,7 @@ jobs:
           done
           git push origin rc/internal --force
         env:
-          GH_TOKEN: ${{ secrets.GHTOKENWORKFLOW }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Rebuild rc/external
         if: contains(vars.RELEASE_STAGES, 'external')
@@ -50,4 +59,4 @@ jobs:
           done
           git push origin rc/external --force
         env:
-          GH_TOKEN: ${{ secrets.GHTOKENWORKFLOW }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
