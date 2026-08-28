@@ -1,0 +1,32 @@
+name: Check Stage Label
+on:
+  pull_request:
+    branches: [rc/external, main]
+
+jobs:
+  check-label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required label for rc/external
+        if: github.base_ref == 'rc/external' && contains(vars.RELEASE_STAGES, 'internal')
+        run: |
+          labels=$(gh pr view ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --json labels -q '.labels[].name')
+          echo "$labels" | grep -q "internal-tested" || (echo "::error::Label 'internal-tested' fehlt – interner Test muss zuerst bestanden werden" && exit 1)
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Check required label for main (external stage)
+        if: github.base_ref == 'main' && contains(vars.RELEASE_STAGES, 'external')
+        run: |
+          labels=$(gh pr view ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --json labels -q '.labels[].name')
+          echo "$labels" | grep -q "external-tested" || (echo "::error::Label 'external-tested' fehlt – externer Test muss zuerst bestanden werden" && exit 1)
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Check required label for main (internal stage only)
+        if: github.base_ref == 'main' && contains(vars.RELEASE_STAGES, 'internal') && !contains(vars.RELEASE_STAGES, 'external')
+        run: |
+          labels=$(gh pr view ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --json labels -q '.labels[].name')
+          echo "$labels" | grep -q "internal-tested" || (echo "::error::Label 'internal-tested' fehlt – interner Test muss zuerst bestanden werden" && exit 1)
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -1,0 +1,16 @@
+name: Stage 2 – Create Pre-release
+on:
+  push:
+    branches: ['rc/external']
+
+jobs:
+  prerelease:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          gh workflow run "Create release" \
+            --ref rc/external \
+            --field prerelease=true \
+            --repo ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN_WORKFLOW }}

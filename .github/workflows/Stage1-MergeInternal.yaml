@@ -1,0 +1,47 @@
+name: Stage 1 – Merge into rc/internal
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
+
+jobs:
+  merge-to-internal:
+    if: contains(vars.RELEASE_STAGES, 'internal')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Labels zurücksetzen (bei erneutem Push nach fehlgeschlagenem Test)
+        if: github.event.action == 'synchronize'
+        run: |
+          gh pr edit ${{ github.event.pull_request.number }} --remove-label "internal-tested" \
+            --repo ${{ github.repository }} 2>/dev/null || true
+          gh pr edit ${{ github.event.pull_request.number }} --remove-label "external-tested" \
+            --repo ${{ github.repository }} 2>/dev/null || true
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN_WORKFLOW }}
+
+      - name: Merge feature branch into rc/internal
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin --prune
+          git fetch origin ${{ github.head_ref }}
+          if git ls-remote --exit-code origin rc/internal > /dev/null 2>&1; then
+            git checkout rc/internal
+            git reset --hard origin/rc/internal
+          else
+            echo "Branch rc/internal existiert nicht – wird aus main angelegt"
+            git checkout -b rc/internal origin/main
+            git push origin rc/internal
+          fi
+          git merge "origin/${{ github.head_ref }}" --no-edit \
+            -m "Merge ${{ github.head_ref }} into rc/internal" || {
+            echo "::error::Merge-Konflikt: ${{ github.head_ref }} kann nicht in rc/internal gemerged werden"
+            git merge --abort
+            exit 1
+          }
+          git push origin rc/internal
