@@ -3,5 +3,5 @@
   "type": "PTE",
   "templateUrl": "https://github.com/conscoo-test/ALGoTemplate@main",
   "templateSha": "40c40ba4f326d6fe5a85b29ec1224085751409a6",
-  "CICDPushBranches": [ "main", "release/*", "feature/*", "rc/internal", "rc/external" ]
+  "CICDPushBranches": [ "main", "rc/internal", "rc/external" ]
 }

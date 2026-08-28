@@ -1,5 +1,10 @@
 name: Stage 1 – Merge into rc/internal
 on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Feature-Branch'
+        required: true
   workflow_run:
     workflows: ['Pull Request Build']
     branches: ['feature/*']
@@ -22,9 +27,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $branch = '${{ github.event.workflow_run.head_branch }}'
+          $branch = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ inputs.branch }}' } else { '${{ github.event.workflow_run.head_branch }}' }
           $prs = gh pr list --base main --head $branch --state open --json number `
             --repo '${{ github.repository }}' | ConvertFrom-Json
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "branch=$branch"
           if ($prs.Count -eq 0) {
             Write-Host "Kein offener PR für $branch – übersprungen"
             Add-Content -Path $env:GITHUB_OUTPUT -Value "found=false"
@@ -69,11 +75,13 @@ jobs:
 
       - name: Merge feature branch into rc/internal
         if: steps.find-pr.outputs.found == 'true'
+        env:
+          BRANCH: ${{ steps.find-pr.outputs.branch }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin --prune
-          git fetch origin ${{ github.event.workflow_run.head_branch }}
+          git fetch origin "$BRANCH"
           if git ls-remote --exit-code origin rc/internal > /dev/null 2>&1; then
             git checkout rc/internal
             git reset --hard origin/rc/internal
@@ -82,9 +90,9 @@ jobs:
             git checkout -b rc/internal origin/main
             git push origin rc/internal
           fi
-          git merge "origin/${{ github.event.workflow_run.head_branch }}" --no-edit \
-            -m "Merge ${{ github.event.workflow_run.head_branch }} into rc/internal" || {
-            echo "::error::Merge-Konflikt: ${{ github.event.workflow_run.head_branch }} kann nicht in rc/internal gemerged werden"
+          git merge "origin/$BRANCH" --no-edit \
+            -m "Merge $BRANCH into rc/internal" || {
+            echo "::error::Merge-Konflikt: $BRANCH kann nicht in rc/internal gemerged werden"
             git merge --abort
             exit 1
           }
