@@ -40,7 +40,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          $raw     = gh api "repos/$env:GITHUB_REPOSITORY/contents/app1/app.json" --ref rc/external | ConvertFrom-Json
+          $raw     = gh api "repos/$env:GITHUB_REPOSITORY/contents/app1/app.json?ref=rc/external" | ConvertFrom-Json
           $appJson = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($raw.content)) | ConvertFrom-Json
           $semver  = ($appJson.version -split '\.')[0..2] -join '.'
           $stamp   = (Get-Date -Format 'yyyyMMddHHmmss')
