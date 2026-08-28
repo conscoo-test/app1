@@ -2,6 +2,7 @@ name: Check Stage Label
 on:
   pull_request:
     branches: [rc/external, main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 jobs:
   check-label:
