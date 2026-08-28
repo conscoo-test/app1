@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GH_TOKEN_WORKFLOW }}
+          token: ${{ secrets.GHTOKENWORKFLOW }}
 
       - name: Merge feature branch into rc/external
         run: |

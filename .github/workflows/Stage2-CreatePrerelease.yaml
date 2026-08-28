@@ -13,4 +13,4 @@ jobs:
             --field prerelease=true \
             --repo ${{ github.repository }}
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN_WORKFLOW }}
+          GH_TOKEN: ${{ secrets.GHTOKENWORKFLOW }}
