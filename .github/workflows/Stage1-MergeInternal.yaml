@@ -1,18 +1,40 @@
 name: Stage 1 – Merge into rc/internal
 on:
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize]
+  workflow_run:
+    workflows: ['Pull Request Build']
+    branches: ['feature/*']
+    types: [completed]
 
 jobs:
   merge-to-internal:
-    if: contains(vars.RELEASE_STAGES, 'internal')
+    if: |
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.repository.full_name == github.repository &&
+      contains(vars.RELEASE_STAGES, 'internal')
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
     steps:
+      - name: Offenen PR für diesen Feature-Branch suchen
+        id: find-pr
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $branch = '${{ github.event.workflow_run.head_branch }}'
+          $prs = gh pr list --base main --head $branch --state open --json number `
+            --repo '${{ github.repository }}' | ConvertFrom-Json
+          if ($prs.Count -eq 0) {
+            Write-Host "Kein offener PR für $branch – übersprungen"
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "found=false"
+          } else {
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "found=true"
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "pr_number=$($prs[0].number)"
+          }
+
       - name: Token aus GitHub App generieren
+        if: steps.find-pr.outputs.found == 'true'
         id: app-token
         shell: pwsh
         env:
@@ -39,27 +61,19 @@ jobs:
           Write-Host "::add-mask::$token"
           Add-Content -Path $env:GITHUB_OUTPUT -Value "token=$token"
 
-      - name: Labels zurücksetzen (bei erneutem Push nach fehlgeschlagenem Test)
-        if: github.event.action == 'synchronize'
-        run: |
-          gh pr edit ${{ github.event.pull_request.number }} --remove-label "internal-tested" \
-            --repo ${{ github.repository }} 2>/dev/null || true
-          gh pr edit ${{ github.event.pull_request.number }} --remove-label "external-tested" \
-            --repo ${{ github.repository }} 2>/dev/null || true
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-
-      - uses: actions/checkout@v4
+      - if: steps.find-pr.outputs.found == 'true'
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Merge feature branch into rc/internal
+        if: steps.find-pr.outputs.found == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin --prune
-          git fetch origin ${{ github.head_ref }}
+          git fetch origin ${{ github.event.workflow_run.head_branch }}
           if git ls-remote --exit-code origin rc/internal > /dev/null 2>&1; then
             git checkout rc/internal
             git reset --hard origin/rc/internal
@@ -68,9 +82,9 @@ jobs:
             git checkout -b rc/internal origin/main
             git push origin rc/internal
           fi
-          git merge "origin/${{ github.head_ref }}" --no-edit \
-            -m "Merge ${{ github.head_ref }} into rc/internal" || {
-            echo "::error::Merge-Konflikt: ${{ github.head_ref }} kann nicht in rc/internal gemerged werden"
+          git merge "origin/${{ github.event.workflow_run.head_branch }}" --no-edit \
+            -m "Merge ${{ github.event.workflow_run.head_branch }} into rc/internal" || {
+            echo "::error::Merge-Konflikt: ${{ github.event.workflow_run.head_branch }} kann nicht in rc/internal gemerged werden"
             git merge --abort
             exit 1
           }
