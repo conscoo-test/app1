@@ -35,7 +35,7 @@ jobs:
           Add-Content -Path $env:GITHUB_OUTPUT -Value "token=$token"
 
       - run: |
-          gh workflow run "Create release" \
+          gh workflow run "CreateRelease.yaml" \
             --ref rc/external \
             --field prerelease=true \
             --repo ${{ github.repository }}
