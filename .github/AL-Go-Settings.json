@@ -1,6 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/microsoft/AL-Go-Actions/v9.2/.Modules/settings.schema.json",
-  "type": "AppSource App",
+  "type": "PTE",
   "templateUrl": "https://github.com/conscoo-test/ALGoTemplate@main",
-  "templateSha": "40c40ba4f326d6fe5a85b29ec1224085751409a6"
+  "templateSha": "40c40ba4f326d6fe5a85b29ec1224085751409a6",
+  "CICDPushBranches": [ "main", "rc/internal", "rc/external" ]
 }

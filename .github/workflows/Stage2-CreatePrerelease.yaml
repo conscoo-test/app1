@@ -1,0 +1,72 @@
+name: Stage 2 – Create Pre-release
+on:
+  workflow_run:
+    workflows: [' CI/CD']
+    branches: ['rc/external']
+    types: [completed]
+
+jobs:
+  prerelease:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Token aus GitHub App generieren
+        id: app-token
+        shell: pwsh
+        env:
+          TOKEN_SECRET: ${{ secrets.GHTOKENWORKFLOW }}
+        run: |
+          $secret = $env:TOKEN_SECRET
+          if ($secret.TrimStart().StartsWith('{')) {
+            $json    = $secret | ConvertFrom-Json
+            $toB64Url = { [Convert]::ToBase64String($args[0]).TrimEnd('=').Replace('+','-').Replace('/','_') }
+            $now     = [System.DateTimeOffset]::UtcNow
+            $header  = & $toB64Url ([System.Text.Encoding]::UTF8.GetBytes('{"alg":"RS256","typ":"JWT"}'))
+            $payload = & $toB64Url ([System.Text.Encoding]::UTF8.GetBytes("{`"iat`":$($now.AddSeconds(-60).ToUnixTimeSeconds()),`"exp`":$($now.AddMinutes(10).ToUnixTimeSeconds()),`"iss`":`"$($json.GitHubAppClientId)`"}"))
+            $rsa     = [System.Security.Cryptography.RSA]::Create()
+            $rsa.ImportFromPem($json.PrivateKey)
+            $sig     = & $toB64Url ($rsa.SignData([System.Text.Encoding]::UTF8.GetBytes("$header.$payload"), [System.Security.Cryptography.HashAlgorithmName]::SHA256, [System.Security.Cryptography.RSASignaturePadding]::Pkcs1))
+            $jwt     = "$header.$payload.$sig"
+            $apiHdr  = @{ Authorization = "Bearer $jwt"; Accept = "application/vnd.github+json"; "X-GitHub-Api-Version" = "2022-11-28" }
+            $install = Invoke-RestMethod -Method GET -Headers $apiHdr -Uri "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/installation"
+            $body    = '{"permissions":{"contents":"write","pull_requests":"write","workflows":"write","metadata":"read","actions":"write"}}'
+            $token   = (Invoke-RestMethod -Method POST -Headers $apiHdr -Body $body -ContentType "application/json" -Uri $install.access_tokens_url).token
+          } else {
+            $token = $secret
+          }
+          Write-Host "::add-mask::$token"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "token=$token"
+
+      - name: Versions-Tag ermitteln
+        id: version
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          $tree    = gh api "repos/$env:GITHUB_REPOSITORY/git/trees/rc/external?recursive=1" | ConvertFrom-Json
+          $paths   = ($tree.tree | Where-Object { $_.path -match '(^|/)app\.json$' -and $_.path -notmatch '\.alpackages' }).path
+          $highest = $null
+          foreach ($p in $paths) {
+            $raw     = gh api "repos/$env:GITHUB_REPOSITORY/contents/$p?ref=rc/external" | ConvertFrom-Json
+            $appJson = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($raw.content)) | ConvertFrom-Json
+            $ver     = [System.Version]($appJson.version -replace '^(\d+\.\d+\.\d+\.\d+).*','$1')
+            if ($null -eq $highest -or $ver -gt $highest.Ver) {
+              $highest = [pscustomobject]@{ Ver = $ver; AppJson = $appJson }
+            }
+          }
+          $semver  = "$($highest.Ver.Major).$($highest.Ver.Minor).$($highest.Ver.Build)"
+          $stamp   = (Get-Date -Format 'yyyyMMddHHmmss')
+          $tag     = "$semver-pre.$stamp"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "tag=$tag"
+
+      - name: Pre-release erstellen
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh workflow run "CreateRelease.yaml" `
+            --ref rc/external `
+            --field "releaseType=Prerelease" `
+            --field "tag=${{ steps.version.outputs.tag }}" `
+            --field "name=Pre-release ${{ steps.version.outputs.tag }}" `
+            --repo ${{ github.repository }}
