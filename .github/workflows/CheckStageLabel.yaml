@@ -7,6 +7,9 @@ on:
 jobs:
   check-label:
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: read
     # Workflow läuft immer durch (exit 0) → keine Failure-Mail; PR wird per Check Run blockiert
     steps:
       - name: Check required label for rc/external
