@@ -7,27 +7,58 @@ on:
 jobs:
   check-label:
     runs-on: ubuntu-latest
+    # Workflow läuft immer durch (exit 0) → keine Failure-Mail; PR wird per Check Run blockiert
     steps:
       - name: Check required label for rc/external
         if: github.base_ref == 'rc/external' && contains(vars.RELEASE_STAGES, 'internal')
-        run: |
-          labels=$(gh pr view ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --json labels -q '.labels[].name')
-          echo "$labels" | grep -q "internal-tested" || (echo "::error::Label 'internal-tested' fehlt – interner Test muss zuerst bestanden werden" && exit 1)
         env:
           GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          labels=$(gh pr view ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --json labels -q '.labels[].name')
+          if echo "$labels" | grep -q "internal-tested"; then
+            conclusion="success"; summary="Label vorhanden."
+          else
+            conclusion="failure"; summary="Label 'internal-tested' fehlt – interner Test muss zuerst bestanden werden."
+          fi
+          gh api repos/${{ github.repository }}/check-runs \
+            --method POST -H "Accept: application/vnd.github+json" \
+            -f name="stage-label-check" -f head_sha="$SHA" \
+            -f conclusion="$conclusion" \
+            -f "output[title]=Stage Label Check" -f "output[summary]=$summary"
 
       - name: Check required label for main (external stage)
         if: github.base_ref == 'main' && contains(vars.RELEASE_STAGES, 'external')
-        run: |
-          labels=$(gh pr view ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --json labels -q '.labels[].name')
-          echo "$labels" | grep -q "external-tested" || (echo "::error::Label 'external-tested' fehlt – externer Test muss zuerst bestanden werden" && exit 1)
         env:
           GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          labels=$(gh pr view ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --json labels -q '.labels[].name')
+          if echo "$labels" | grep -q "external-tested"; then
+            conclusion="success"; summary="Label vorhanden."
+          else
+            conclusion="failure"; summary="Label 'external-tested' fehlt – externer Test muss zuerst bestanden werden."
+          fi
+          gh api repos/${{ github.repository }}/check-runs \
+            --method POST -H "Accept: application/vnd.github+json" \
+            -f name="stage-label-check" -f head_sha="$SHA" \
+            -f conclusion="$conclusion" \
+            -f "output[title]=Stage Label Check" -f "output[summary]=$summary"
 
       - name: Check required label for main (internal stage only)
         if: github.base_ref == 'main' && contains(vars.RELEASE_STAGES, 'internal') && !contains(vars.RELEASE_STAGES, 'external')
-        run: |
-          labels=$(gh pr view ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --json labels -q '.labels[].name')
-          echo "$labels" | grep -q "internal-tested" || (echo "::error::Label 'internal-tested' fehlt – interner Test muss zuerst bestanden werden" && exit 1)
         env:
           GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          labels=$(gh pr view ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --json labels -q '.labels[].name')
+          if echo "$labels" | grep -q "internal-tested"; then
+            conclusion="success"; summary="Label vorhanden."
+          else
+            conclusion="failure"; summary="Label 'internal-tested' fehlt – interner Test muss zuerst bestanden werden."
+          fi
+          gh api repos/${{ github.repository }}/check-runs \
+            --method POST -H "Accept: application/vnd.github+json" \
+            -f name="stage-label-check" -f head_sha="$SHA" \
+            -f conclusion="$conclusion" \
+            -f "output[title]=Stage Label Check" -f "output[summary]=$summary"

@@ -43,9 +43,18 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          $raw     = gh api "repos/$env:GITHUB_REPOSITORY/contents/app1/app.json?ref=rc/external" | ConvertFrom-Json
-          $appJson = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($raw.content)) | ConvertFrom-Json
-          $semver  = ($appJson.version -split '\.')[0..2] -join '.'
+          $tree    = gh api "repos/$env:GITHUB_REPOSITORY/git/trees/rc/external?recursive=1" | ConvertFrom-Json
+          $paths   = ($tree.tree | Where-Object { $_.path -match '(^|/)app\.json$' -and $_.path -notmatch '\.alpackages' }).path
+          $highest = $null
+          foreach ($p in $paths) {
+            $raw     = gh api "repos/$env:GITHUB_REPOSITORY/contents/$p?ref=rc/external" | ConvertFrom-Json
+            $appJson = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($raw.content)) | ConvertFrom-Json
+            $ver     = [System.Version]($appJson.version -replace '^(\d+\.\d+\.\d+\.\d+).*','$1')
+            if ($null -eq $highest -or $ver -gt $highest.Ver) {
+              $highest = [pscustomobject]@{ Ver = $ver; AppJson = $appJson }
+            }
+          }
+          $semver  = "$($highest.Ver.Major).$($highest.Ver.Minor).$($highest.Ver.Build)"
           $stamp   = (Get-Date -Format 'yyyyMMddHHmmss')
           $tag     = "$semver-pre.$stamp"
           Add-Content -Path $env:GITHUB_OUTPUT -Value "tag=$tag"
