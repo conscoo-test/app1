@@ -13,9 +13,10 @@ on:
 jobs:
   merge-to-internal:
     if: |
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.repository.full_name == github.repository &&
-      contains(vars.RELEASE_STAGES, 'internal')
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.repository.full_name == github.repository &&
+       contains(vars.RELEASE_STAGES, 'internal'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
