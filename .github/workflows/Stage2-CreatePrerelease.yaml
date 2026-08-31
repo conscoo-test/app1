@@ -45,18 +45,17 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           $treeJson = gh api "repos/$env:GITHUB_REPOSITORY/git/trees/rc/external?recursive=1"
-          if ($LASTEXITCODE -ne 0) { Write-Error "Tree API failed (HTTP 404?): $treeJson"; exit 1 }
+          if ($LASTEXITCODE -ne 0) { Write-Error "Tree API failed: $treeJson"; exit 1 }
           $tree    = $treeJson | ConvertFrom-Json
-          $paths   = ($tree.tree | Where-Object { $_.path -match '(^|/)app\.json$' -and $_.path -notmatch '\.alpackages' }).path
+          $entries = $tree.tree | Where-Object { $_.path -match '(^|/)app\.json$' -and $_.path -notmatch '\.alpackages' -and $_.type -eq 'blob' }
           $highest = $null
-          foreach ($p in $paths) {
-            $rawJson = gh api "repos/$env:GITHUB_REPOSITORY/contents/$p?ref=rc/external"
-            if ($LASTEXITCODE -ne 0) { Write-Warning "Skipping $p (API error: $rawJson)"; continue }
-            $raw     = $rawJson | ConvertFrom-Json
-            if (-not $raw.content) { Write-Warning "Skipping $p (no content)"; continue }
-            $appJson = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($raw.content)) | ConvertFrom-Json
+          foreach ($entry in $entries) {
+            $blobJson = gh api "repos/$env:GITHUB_REPOSITORY/git/blobs/$($entry.sha)"
+            if ($LASTEXITCODE -ne 0) { Write-Warning "Skipping $($entry.path) (blob error)"; continue }
+            $blob    = $blobJson | ConvertFrom-Json
+            $appJson = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($blob.content)) | ConvertFrom-Json
             $verStr  = $appJson.version -replace '^(\d+\.\d+\.\d+\.\d+).*','$1'
-            if (-not $verStr) { Write-Warning "Skipping $p (no version field)"; continue }
+            if (-not $verStr) { Write-Warning "Skipping $($entry.path) (no version field)"; continue }
             $ver     = [System.Version]$verStr
             if ($null -eq $highest -or $ver -gt $highest.Ver) {
               $highest = [pscustomobject]@{ Ver = $ver; AppJson = $appJson }
