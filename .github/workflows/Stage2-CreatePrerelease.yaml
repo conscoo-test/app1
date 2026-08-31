@@ -1,5 +1,6 @@
 name: Stage 2 – Create Pre-release
 on:
+  workflow_dispatch:
   workflow_run:
     workflows: ['CI/CD']
     branches: ['rc/external']
@@ -43,17 +44,25 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          $tree    = gh api "repos/$env:GITHUB_REPOSITORY/git/trees/rc/external?recursive=1" | ConvertFrom-Json
+          $treeJson = gh api "repos/$env:GITHUB_REPOSITORY/git/trees/rc/external?recursive=1"
+          if ($LASTEXITCODE -ne 0) { Write-Error "Tree API failed (HTTP 404?): $treeJson"; exit 1 }
+          $tree    = $treeJson | ConvertFrom-Json
           $paths   = ($tree.tree | Where-Object { $_.path -match '(^|/)app\.json$' -and $_.path -notmatch '\.alpackages' }).path
           $highest = $null
           foreach ($p in $paths) {
-            $raw     = gh api "repos/$env:GITHUB_REPOSITORY/contents/$p?ref=rc/external" | ConvertFrom-Json
+            $rawJson = gh api "repos/$env:GITHUB_REPOSITORY/contents/$p?ref=rc/external"
+            if ($LASTEXITCODE -ne 0) { Write-Warning "Skipping $p (API error: $rawJson)"; continue }
+            $raw     = $rawJson | ConvertFrom-Json
+            if (-not $raw.content) { Write-Warning "Skipping $p (no content)"; continue }
             $appJson = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($raw.content)) | ConvertFrom-Json
-            $ver     = [System.Version]($appJson.version -replace '^(\d+\.\d+\.\d+\.\d+).*','$1')
+            $verStr  = $appJson.version -replace '^(\d+\.\d+\.\d+\.\d+).*','$1'
+            if (-not $verStr) { Write-Warning "Skipping $p (no version field)"; continue }
+            $ver     = [System.Version]$verStr
             if ($null -eq $highest -or $ver -gt $highest.Ver) {
               $highest = [pscustomobject]@{ Ver = $ver; AppJson = $appJson }
             }
           }
+          if ($null -eq $highest) { Write-Error "No valid app.json with version found in rc/external"; exit 1 }
           $semver  = "$($highest.Ver.Major).$($highest.Ver.Minor).$($highest.Ver.Build)"
           $stamp   = (Get-Date -Format 'yyyyMMddHHmmss')
           $tag     = "$semver-pre.$stamp"
